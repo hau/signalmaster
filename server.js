@@ -60,11 +60,40 @@ io.sockets.on('connection', function (client) {
     function join(name, cb) {
         // sanity check
         if (typeof name !== 'string') return;
+
+				var secret = require("./secret");
+				var key = secret.key; 
+				key = crypto.createHash('sha256').update(key, 'ascii').digest();
+				var iv = secret.iv;
+
+				// name is encrypted string of "#{room access time}"
+				var decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+				var decryptedString = decipher.update(name, 'base64', 'utf8');
+				decryptedString += decipher.final('utf8');
+				// turn the decrypted string into a date time
+				var accessToken = JSON.parse(decryptedString);
+
+				console.log("decrypted time=" + accessToken.timestamp);
+				var now = new Date();
+				console.log("now=" + now.valueOf());
+				console.log("time difference=" + (now.valueOf() - accessToken.timestamp));
+				// if joining room much later than request for access token (5s)
+				if ((now.valueOf() - accessToken.timestamp) > 5000) return;
+
+				console.log("Joining room: " + accessToken.room);
+        // leave any existing rooms
+        if (client.room) removeFeed();
+        safeCb(cb)(null, describeRoom(accessToken.room));
+        client.join(accessToken.room);
+        client.room = accessToken.room;
+/*
+				console.log("Joining room: " + name);
         // leave any existing rooms
         if (client.room) removeFeed();
         safeCb(cb)(null, describeRoom(name));
         client.join(name);
         client.room = name;
+*/
     }
 
     // we don't want to pass "leave" directly because the
